@@ -2,6 +2,12 @@ import { spawnSync } from "node:child_process";
 import process from "node:process";
 
 export function runCommand(command, args = [], options = {}) {
+  const shell =
+    options.shell !== undefined
+      ? options.shell
+      : process.platform === "win32"
+        ? process.env.SHELL || true
+        : false;
   const result = spawnSync(command, args, {
     cwd: options.cwd,
     env: options.env,
@@ -9,7 +15,7 @@ export function runCommand(command, args = [], options = {}) {
     input: options.input,
     maxBuffer: options.maxBuffer,
     stdio: options.stdio ?? "pipe",
-    shell: process.platform === "win32" ? (process.env.SHELL || true) : false,
+    shell,
     windowsHide: true
   });
 
@@ -64,13 +70,23 @@ export function terminateProcessTree(pid, options = {}) {
   const killImpl = options.killImpl ?? process.kill.bind(process);
 
   if (platform === "win32") {
+    // taskkill needs no shell; forcing shell:false avoids MSYS/Git-Bash argument
+    // conversion mangling "/PID" into a path, and sidesteps the DEP0190 warning.
     const result = runCommandImpl("taskkill", ["/PID", String(pid), "/T", "/F"], {
       cwd: options.cwd,
-      env: options.env
+      env: options.env,
+      shell: false
     });
 
     if (!result.error && result.status === 0) {
       return { attempted: true, delivered: true, method: "taskkill", result };
+    }
+
+    // taskkill exits 128 when the target process does not exist. Its stderr is
+    // localized (and becomes mojibake when a non-UTF-8 console codepage is
+    // decoded as utf8), so the exit code is the only locale-independent signal.
+    if (!result.error && result.status === 128) {
+      return { attempted: true, delivered: false, method: "taskkill", result };
     }
 
     const combinedOutput = `${result.stderr}\n${result.stdout}`.trim();

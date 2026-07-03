@@ -983,7 +983,17 @@ async function handleCancel(argv) {
     );
   }
 
-  terminateProcessTree(job.pid ?? Number.NaN);
+  // Termination failures must not leave the job stuck as "running": the user is
+  // abandoning this job, so persist the cancelled state even if the (possibly
+  // already-dead) worker cannot be terminated.
+  try {
+    terminateProcessTree(job.pid ?? Number.NaN);
+  } catch (error) {
+    appendLogLine(
+      job.logFile,
+      `Process termination failed during cancel${error?.message ? `: ${error.message}` : "."}`
+    );
+  }
   appendLogLine(job.logFile, "Cancelled by user.");
 
   const completedAt = nowIso();

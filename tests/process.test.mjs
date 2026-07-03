@@ -53,3 +53,47 @@ test("terminateProcessTree treats missing Windows processes as already stopped",
   assert.equal(outcome.result.status, 128);
   assert.match(outcome.result.stdout, /not found/i);
 });
+
+test("terminateProcessTree treats exit 128 as not-found even with localized/mojibake output", () => {
+  // cp950 rendering of a localized "process not found" message decoded as utf8.
+  const outcome = terminateProcessTree(36564, {
+    platform: "win32",
+    runCommandImpl(command, args) {
+      return {
+        command,
+        args,
+        status: 128,
+        signal: null,
+        stdout: "",
+        stderr: "\uFFFD\uFFFD: \uFFFD\uFFFD\uFFFD\uFFFD\uFFFD",
+        error: null
+      };
+    }
+  });
+
+  assert.equal(outcome.attempted, true);
+  assert.equal(outcome.delivered, false);
+  assert.equal(outcome.method, "taskkill");
+  assert.equal(outcome.result.status, 128);
+});
+
+test("terminateProcessTree invokes taskkill without a shell", () => {
+  let capturedOptions = null;
+  terminateProcessTree(1234, {
+    platform: "win32",
+    runCommandImpl(command, args, options) {
+      capturedOptions = options;
+      return {
+        command,
+        args,
+        status: 0,
+        signal: null,
+        stdout: "",
+        stderr: "",
+        error: null
+      };
+    }
+  });
+
+  assert.equal(capturedOptions.shell, false);
+});
