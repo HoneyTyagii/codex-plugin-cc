@@ -1,13 +1,22 @@
 import { spawnSync } from "node:child_process";
 import process from "node:process";
 
+function resolveShellOption(shell) {
+  // Normalize null/undefined to the platform default so callers can pass
+  // through optional values without tripping spawnSync's ERR_INVALID_ARG_TYPE.
+  if (shell === undefined || shell === null) {
+    return process.platform === "win32" ? process.env.SHELL || true : false;
+  }
+  if (typeof shell !== "boolean" && typeof shell !== "string") {
+    throw new TypeError(
+      `runCommand "shell" option must be a boolean or string, received ${typeof shell}`
+    );
+  }
+  return shell;
+}
+
 export function runCommand(command, args = [], options = {}) {
-  const shell =
-    options.shell !== undefined
-      ? options.shell
-      : process.platform === "win32"
-        ? process.env.SHELL || true
-        : false;
+  const shell = resolveShellOption(options.shell);
   const result = spawnSync(command, args, {
     cwd: options.cwd,
     env: options.env,
